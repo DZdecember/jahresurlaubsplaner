@@ -9,12 +9,17 @@ st.set_page_config(page_title="Jahresurlaubsplaner", page_icon="📅", layout="w
 st.title("📅 Jahresurlaubsplan / -antrag App")
 st.markdown("Füllen Sie Ihre Urlaubsplanung digital aus. Die App berechnet die Arbeitstage automatisch und erstellt einen fertigen PDF-Urlaubsantrag für Ihren Chef.")
 
-# Sidebar for Employee Info
+# Sidebar for Employee Info & Entitlement Calculations
 st.sidebar.header("👤 Mitarbeiterinformationen")
 name = st.sidebar.text_input("Name des Mitarbeiters", placeholder="Max Mustermann")
 position = st.sidebar.text_input("Berufsbezeichnung / Position", placeholder="Software Entwickler")
 department = st.sidebar.text_input("Abteilung", placeholder="IT")
 year = st.sidebar.number_input("Kalenderjahr", min_value=2026, max_value=2035, value=2026)
+
+st.sidebar.markdown("---")
+st.sidebar.header("📊 Urlaubsanspruch")
+# Input for total vacation days the employer grants
+total_allowance = st.sidebar.number_input("Gesamtanspruch (Tage im Jahr)", min_value=0, max_value=100, value=30)
 
 # Main Area for Vacation Blocks
 st.header("✈️ Geplante Urlaubszeiträume")
@@ -44,7 +49,6 @@ for i in range(1, 7):
         end = st.date_input(f"Ende {i}", value=None, key=f"end_{i}", label_visibility="collapsed")
         
     with cols_input[3]:
-        # Simple auto-detection of month if dates are selected
         default_month = ""
         if start:
             months_de = ["", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
@@ -72,17 +76,39 @@ for i in range(1, 7):
     })
     total_days += block_days
 
-# Summary Display
+# Dynamic Balance Calculation
+remaining_days = total_allowance - total_days
+
+# Summary Display UI Cards
 st.markdown("---")
-st.subheader(f"📊 Zusammenfassung: Beantragte Urlaubstage gesamt: **{total_days} Arbeitstage**")
+st.subheader("📊 Urlaubsbilanz Übersicht")
+sum_col1, sum_col2, sum_col3 = st.columns(3)
+with sum_col1:
+    st.metric("Gesamtanspruch", f"{total_allowance} Tage")
+with sum_col2:
+    st.metric("Beantragte Urlaubstage", f"{total_days} Tage", delta=f"-{total_days}" if total_days > 0 else None)
+with sum_col3:
+    if remaining_days >= 0:
+        st.metric("Verbleibender Resturlaub", f"{remaining_days} Tage")
+    else:
+        st.metric("⚠️ Anspruch überschritten!", f"{remaining_days} Tage", delta=remaining_days)
 
 # Function to generate HTML template populated with runtime app data
 def generate_html():
     rows_html = ""
     for idx, b in enumerate(blocks_data, 1):
-        rows_html += f"<tr><td style='text-align: center; font-weight: bold; background-color: #fafbfc; border: 1px solid #dcdde1; padding: 10px 8px;'>{idx}</td><td style='border: 1px solid #dcdde1; padding: 10px 8px; height: 38px;'>{b['start']}</td><td style='border: 1px solid #dcdde1; padding: 10px 8px;'>{b['end']}</td><td style='border: 1px solid #dcdde1; padding: 10px 8px;'>{b['month']}</td><td style='border: 1px solid #dcdde1; padding: 10px 8px; text-align: right; font-weight: bold;'>{b['days']}</td></tr>"
+        rows_html += f"""
+        <tr>
+            <td style="text-align: center; font-weight: bold; background-color: #fafbfc; border: 1px solid #dcdde1; padding: 10px 8px;">{idx}</td>
+            <td style="border: 1px solid #dcdde1; padding: 10px 8px; height: 38px;">{b['start']}</td>
+            <td style="border: 1px solid #dcdde1; padding: 10px 8px;">{b['end']}</td>
+            <td style="border: 1px solid #dcdde1; padding: 10px 8px;">{b['month']}</td>
+            <td style="border: 1px solid #dcdde1; padding: 10px 8px; text-align: right; font-weight: bold;">{b['days']}</td>
+        </tr>
+        """
     
-    html_template = f'''<!DOCTYPE html>
+    html_template = f"""
+    <!DOCTYPE html>
     <html lang="de">
     <head>
         <meta charset="UTF-8">
@@ -108,8 +134,9 @@ def generate_html():
     <body>
         <div class="header-container">
             <h1 class="form-title">Jahresurlaubsplan / -antrag</h1>
-            <p style="margin:5px 0 0 0; color:#7f8c8d; font-size:10pt;">Bitte nutzen Sie dieses Formular zur vorausschauenden Planung Ihrer Urlaubszeiten für das gesamte Kalenderjahr.</p>
+            <p style="margin:5px 0 0 0; color:#7f8c8d; font-size:10pt;">Bitte nutzen Sie dieses Formular zur vorausschauenden Planung Ihrer Urlaubszeiten.</p>
         </div>
+
         <div class="section-title">Mitarbeiterinformationen</div>
         <table class="form-table">
             <tr>
@@ -127,6 +154,7 @@ def generate_html():
                 <td class="input-field">{year}</td>
             </tr>
         </table>
+
         <div class="section-title">Geplante Urlaubszeiträume</div>
         <table class="schedule-table">
             <thead>
@@ -142,15 +170,22 @@ def generate_html():
                 {rows_html}
             </tbody>
         </table>
+
         <div class="summary-box">
-            <table style="width: 100%; border-collapse: collapse;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11pt;">
                 <tr>
-                    <td style="width: 55%; font-size: 10pt; color: #57606f;">Addieren Sie die Arbeitstage aller oben eingetragenen Blöcke, um die Jahresgesamtsumme zu erhalten.</td>
-                    <td style="width: 30%; font-weight: bold; text-align: right; padding-right: 15px;">Gesamtsumme der Urlaubstage für das Jahr:</td>
-                    <td style="width: 15%; border: 2px solid #2b5c8f; background-color: #fff; height: 35px; text-align:center; font-weight:bold; font-size:13pt; color:#2b5c8f; line-height:35px;">{total_days}</td>
+                    <td style="width: 30%; font-weight: bold; padding: 6px;">Gesamtanspruch des Jahres:</td>
+                    <td style="width: 10%; border: 1px solid #bdc3c7; background-color: #fff; text-align: center; font-weight: bold;">{total_allowance} Tage</td>
+                    <td style="width: 5%;"></td>
+                    <td style="width: 30%; font-weight: bold; padding: 6px; color: #2b5c8f;">Beantragte Urlaubstage gesamt:</td>
+                    <td style="width: 10%; border: 2px solid #2b5c8f; background-color: #fff; text-align: center; font-weight: bold; color: #2b5c8f;">{total_days} Tage</td>
+                    <td style="width: 5%;"></td>
+                    <td style="width: 30%; font-weight: bold; padding: 6px; color: #27ae60;">Verbleibender Resturlaub:</td>
+                    <td style="width: 10%; border: 2px solid #27ae60; background-color: #fff; text-align: center; font-weight: bold; color: #27ae60;">{remaining_days} Tage</td>
                 </tr>
             </table>
         </div>
+
         <div class="section-title">Genehmigung & Unterschriften</div>
         <table class="signature-table">
             <tr>
@@ -158,8 +193,25 @@ def generate_html():
                 <td><div class="signature-line">Datum</div></td>
             </tr>
         </table>
+
+        <div style="margin-top: 30px; background-color: #fafbfc; border: 1px dashed #bdc3c7; padding: 12px; border-radius: 4px;">
+            <div style="font-weight: bold; color: #1e3d59; margin-bottom: 10px;">Nur vom Management / der Personalabteilung auszufüllen</div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="width: 45%; vertical-align: top;">
+                        <div class="checkbox-container"><div class="checkbox-box"></div> <span style="font-size:10pt;">Gesamtplanung genehmigt</span></div>
+                        <div class="checkbox-container" style="margin-top: 4px;"><div class="checkbox-box"></div> <span style="font-size:10pt;">Genehmigt mit Änderungen</span></div>
+                    </td>
+                    <td style="width: 55%; vertical-align: top;">
+                        <div class="signature-line" style="margin-top: 10px;">Unterschrift Vorgesetzter / Manager</div>
+                        <div class="signature-line" style="margin-top: 20px;">Datum</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
     </body>
-    </html>'''
+    </html>
+    """
     return html_template
 
 # PDF Generation Trigger
@@ -168,10 +220,11 @@ if st.button("🚀 Offizielles PDF-Dokument generieren"):
         try:
             final_html = generate_html()
             pdf_bytes = HTML(string=final_html).write_pdf()
+            
             st.download_button(
                 label="📥 Bereitgestellten Urlaubsantrag herunterladen (PDF)",
                 data=pdf_bytes,
-                file_name=f"Urlaubsantrag_{year}.pdf",
+                file_name=f"Urlaubsantrag_{name.replace(' ', '_') if name else 'Mitarbeiter'}_{year}.pdf",
                 mime="application/pdf"
             )
             st.success("Erfolgreich generiert! Klicken Sie oben, um die PDF herunterzuladen.")
